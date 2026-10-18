@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kraftstaden AB — Heat Control</title>
+<link rel="stylesheet" href="dashboard.css?v=11" />
+</head>
+<body>
+
+<div class="app">
+
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="https://www.kraftstaden.se/" target="_blank" rel="noopener" title="Visit kraftstaden.se">
+      <span class="brand-mark">
+        <img src="assets/kraftstaden-logo.png" alt="Kraftstaden Fastigheter Trollhättan" />
+      </span>
+      <div class="brand-text">
+        <div class="brand-sub">HEAT CONTROL</div>
+      </div>
+    </a>
+
+    <nav class="nav" id="mainNav">
+      <button class="nav-item" data-section="control" aria-current="true" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
+        Control panel
+      </button>
+      <button class="nav-item" data-section="weekly" aria-current="false" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14.5V5a2 2 0 1 0-4 0v9.5a4 4 0 1 0 4 0z"/><line x1="12" y1="7" x2="12" y2="12"/></svg>
+        Weekly temperature
+      </button>
+      <button class="nav-item" data-section="settings" aria-current="false" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+        Settings
+      </button>
+      <button class="nav-item" data-section="about" aria-current="false" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.7" r="0.9" fill="currentColor" stroke="none"/></svg>
+        About
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <span class="status-dot"></span>
+      <span>System online</span>
+    </div>
+  </aside>
+
+  <div class="main">
+
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="icon-btn menu-btn" id="menuToggle" type="button" aria-label="Open menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+        <h1 id="pageTitle">Control panel</h1>
+      </div>
+      <div class="topbar-right">
+        <span class="weather-chip" id="weatherChip">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 18a4.5 4.5 0 0 0 0-9 6 6 0 0 0-11.5 2 4 4 0 0 0 .5 7.9h11"/></svg>
+          Trollhättan · <strong id="weatherVal">—</strong>
+        </span>
+        <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle dark mode">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ===================== Weekly temperature ===================== -->
+    <section class="view" id="view-weekly" hidden>
+      <div class="weather-fx" id="weatherFx" aria-hidden="true"></div>
+
+      <div class="view-head">
+        <p class="subtitle" id="subtitle">Loading…</p>
+        <p class="hint" id="scenarioScope"></p>
+      </div>
+
+      <div class="filters">
+        <label>Day range</label>
+        <div class="seg" id="rangeSeg" role="group" aria-label="Date range">
+          <button data-days="3" type="button">3d</button>
+          <button data-days="7" type="button" aria-pressed="true">7d</button>
+          <button data-days="14" type="button">14d</button>
+          <button data-days="30" type="button">30d</button>
+          <button data-days="90" type="button">90d</button>
+          <button data-days="365" type="button">1yr</button>
+        </div>
+        <div class="seg view-toggle" id="viewSeg" role="group" aria-label="View">
+          <button data-view="charts" type="button" aria-pressed="true">Charts</button>
+          <button data-view="table" type="button">Table</button>
+        </div>
+      </div>
+
+      <div class="kpi-row" id="kpiRow"></div>
+
+      <div class="card">
+        <h2>Heat-usage forecast <span class="confidence-pill assumed" style="vertical-align:middle;">illustrative</span></h2>
+        <p class="card-sub" id="forecastNote">Loading…</p>
+        <div class="kpi-row" id="forecastRow"></div>
+        <p class="hint" id="forecastTrainedOn"></p>
+        <p class="hint" id="forecastFeatures"></p>
+      </div>
+
+      <div id="chartsView">
+        <div class="card">
+          <h2>Indoor temperature — baseline vs. optimized</h2>
+          <p class="card-sub">Shaded band = comfort target. Gray bands = occupied hours. Outdoor temperature shown as dashed reference.</p>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-baseline)"></span>Baseline (fixed schedule)</span>
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-optimized)"></span>Optimized (forecast-based)</span>
+            <span class="legend-item"><span class="legend-swatch-dash"></span>Outdoor temp</span>
+          </div>
+          <div class="chart-wrap" id="tempChartWrap"></div>
+        </div>
+
+        <div class="card">
+          <h2>Heating power draw — baseline vs. optimized</h2>
+          <p class="card-sub">Lower, smoother curves mean less peak demand and lower effect-based grid charges.</p>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-baseline)"></span>Baseline (kW)</span>
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-optimized)"></span>Optimized (kW)</span>
+          </div>
+          <div class="chart-wrap" id="powerChartWrap"></div>
+        </div>
+
+        <div class="card">
+          <h2>Cumulative energy consumption</h2>
+          <p class="card-sub">Running total over the selected period — the gap between the lines is the savings.</p>
+          <div class="legend">
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-baseline)"></span>Baseline (kWh)</span>
+            <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-optimized)"></span>Optimized (kWh)</span>
+          </div>
+          <div class="chart-wrap" id="cumChartWrap"></div>
+        </div>
+      </div>
+
+      <div id="tableView" style="display:none;">
+        <div class="card">
+          <h2>Hourly data</h2>
+          <p class="card-sub" id="tableSub">All values for the selected range.</p>
+          <div class="table-scroll">
+            <table class="data-table" id="dataTable">
+              <thead></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== Control panel ===================== -->
+    <section class="view" id="view-control">
+      <div class="control-toolbar">
+        <p class="control-sub">Outdoor temperature today: <strong id="controlOutdoor">—</strong> · heaters shown in <strong>Auto</strong> follow this reading</p>
+        <div class="control-legend">
+          <span><span class="dot heating"></span>Heating</span>
+          <span><span class="dot idle"></span>Idle</span>
+          <span><span class="dot attention"></span>Needs attention</span>
+        </div>
+      </div>
+
+      <div class="building-list" id="buildingList">
+        <div class="b-row b-head">
+          <div class="b-id">Building</div>
+          <div class="b-type">Type</div>
+          <div class="b-temp">Indoor / target</div>
+          <div class="b-status">Status</div>
+          <div class="b-mode">Mode</div>
+          <div class="b-power">Heater</div>
+        </div>
+        <!-- rows injected by dashboard.js -->
+      </div>
+    </section>
+
+    <!-- ===================== Settings ===================== -->
+    <section class="view" id="view-settings" hidden>
+      <div class="settings-grid">
+
+        <div class="card settings-card">
+          <h2>Units</h2>
+          <p class="card-sub">Applies to temperatures across the dashboard.</p>
+          <label class="radio-row"><input type="radio" name="unit" value="c" checked /> Celsius (°C)</label>
+          <label class="radio-row"><input type="radio" name="unit" value="f" /> Fahrenheit (°F)</label>
+        </div>
+
+        <div class="card settings-card">
+          <h2>Appearance</h2>
+          <p class="card-sub">Switch between light and dark mode.</p>
+          <label class="radio-row"><input type="radio" name="appearance" value="light" checked /> Light</label>
+          <label class="radio-row"><input type="radio" name="appearance" value="dark" /> Dark</label>
+        </div>
+
+        <div class="card settings-card">
+          <h2>Alerts</h2>
+          <p class="card-sub">Notify the facilities team when a building drifts out of its comfort target.</p>
+          <label class="check-row"><input type="checkbox" checked /> Email when a building needs attention</label>
+          <label class="check-row"><input type="checkbox" /> Weekly summary report</label>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ===================== About ===================== -->
+    <section class="view" id="view-about" hidden>
+      <div class="view-head">
+        <p class="subtitle">Where this prototype's numbers come from, and how much to trust each one.</p>
+      </div>
+
+      <div class="card">
+        <h2>Data source</h2>
+        <p class="card-sub">Running on a real digital-twin simulation: a full year (2025) of one classroom — Room 101, 60 m², Trollhättan — under real SMHI weather (Såtenäs station; Vänersborg was tried first but only reports temperature every quarter-hour). The data is simulated, not measured, and that's stated throughout the dashboard — see the "illustrative"/confidence tags below.</p>
+        <p class="hint">Raw twin export: <code>data/twin_dashboard.json</code> (format 1.0, spec at <code>data/dashboard-format.md</code>). <code>data/SCHEMA.md</code> documents the shape this dashboard actually reads (<code>data/dashboard_data.json</code>), built from the twin export by <code>generate_data.py</code>. The classroom parameter research behind it is at <code>data/params_research.md</code>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Scenarios</h2>
+        <p class="card-sub">The twin simulated four control scenarios; this dashboard charts the two extremes of that story.</p>
+        <p class="hint"><strong>Baseline ("Today")</strong> — the building's actual, undiagnosed control faults: roughly half the radiator thermostatic valves stuck open, an outdoor-temperature sensor reading about 1.5 °C low with a one-hour lag, and a manual 2 °C morning boost layered on top. <strong>Optimized ("Smart control")</strong> — coordinated smart-valve control with those faults fixed. Two more scenarios exist in the raw data but aren't charted here yet — "faults fixed, same old controller" and "smart control running on the old faulty valves" — see <code>data/dashboard-format.md</code>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Room energy balance</h2>
+        <p class="card-sub">The twin's own heat model runs on this equation — the contract agreed with the heat-model owner, not a display-only diagram.</p>
+        <div class="equation">C &middot; dT<sub>in</sub>/dt = Q<sub>radiator</sub> + Q<sub>internal</sub> + Q<sub>solar</sub> &minus; (T<sub>in</sub> &minus; T<sub>out</sub>)/R &minus; Q<sub>vent</sub></div>
+        <p class="hint">Q<sub>radiator</sub>: twin, from valve position &amp; supply temperature, capped at the 3 kW rated output. Q<sub>internal</sub>: pupils + teacher + lighting + equipment while occupied. Q<sub>solar</sub>: irradiance &times; window area &times; glazing g-value. Q<sub>vent</sub>: ventilation loss, net of heat-recovery efficiency — the lever the "optimized" scenario uses. Full term-by-term definitions: <code>data/room_energy_balance.md</code>.</p>
+      </div>
+
+      <div class="card">
+        <h2>Heat-usage forecast model <span class="confidence-pill assumed">preview</span></h2>
+        <p class="card-sub">A teammate is separately training a short-horizon forecasting model, trained on a public dataset rather than this twin. It isn't connected to this dashboard yet — the forecast card on the Weekly temperature page is illustrative, not live output.</p>
+        <p class="hint">Predicts heat usage 1 h / 6 h / 24 h ahead, conditioned on the past 24 h or 168 h (1 week) of heat usage. Features: time, past heat input, outdoor temperature, wind speed, wind direction, solar energy — chosen partly because they're simple enough for real IoT sensors to supply. Training data: ~200,000 cleaned hourly readings (from 2.2 million raw) across 48 Oslo school buildings — the SINTEF COFACTOR-SBHUB Oslo dataset (S.K. Lien et al., <em>Data in Brief</em> 63, 2025, doi:10.1016/j.dib.2025.112288).</p>
+      </div>
+
+      <div class="card">
+        <h2>Validation benchmarks</h2>
+        <p class="card-sub">How this model's assumptions compare to published Swedish school energy-use data.</p>
+        <div class="kpi-row" id="benchmarkRow"></div>
+      </div>
+
+      <div class="card">
+        <h2>Model parameters &amp; sources</h2>
+        <p class="card-sub">What the classroom heat model runs on, and how confident each number is — sourced, derived, assumed, or unknown.</p>
+        <div class="table-scroll">
+          <table class="data-table param-table" id="paramTable">
+            <thead>
+              <tr><th>Group</th><th>Parameter</th><th>Value</th><th>Confidence</th><th>Source</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="hint" id="paramOpenItems"></p>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<!-- ===================== Building detail drawer ===================== -->
+<div class="detail-backdrop" id="detailBackdrop"></div>
+<aside class="detail-drawer" id="detailDrawer" aria-hidden="true">
+  <div class="detail-head">
+    <div>
+      <div class="detail-eyebrow">BUILDING MANAGEMENT SYSTEM</div>
+      <div class="detail-building-name" id="detailName">—</div>
+      <div class="detail-code" id="detailCode">—</div>
+      <div class="detail-status" id="detailStatus">—</div>
+    </div>
+    <button class="detail-close" id="detailClose" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
+    </button>
+  </div>
+
+  <div class="detail-control-strip" id="detailControlStrip"></div>
+  <div class="detail-hint" id="detailHint"></div>
+
+  <div class="detail-body">
+    <div class="detail-metrics" id="detailMetrics"></div>
+    <div id="detailTabContent"></div>
+  </div>
+
+  <div class="detail-tabs" id="detailTabs" role="tablist">
+    <button type="button" data-tab="hvac" role="tab" aria-selected="true">HVAC</button>
+    <button type="button" data-tab="lighting" role="tab" aria-selected="false">LIGHTING</button>
+    <button type="button" data-tab="energy" role="tab" aria-selected="false">ENERGY</button>
+    <button type="button" data-tab="alarms" role="tab" aria-selected="false">ALARMS</button>
+  </div>
+</aside>
+
+<script src="dashboard.js?v=12"></script>
+</body>
+</html>
