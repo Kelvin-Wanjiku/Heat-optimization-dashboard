@@ -108,7 +108,20 @@
         "). If you opened this file directly, serve the folder instead: " +
         "<code>python3 -m http.server</code>, then open the localhost URL.";
     });
+  function setLiveWeather(c) {
+    document.getElementById("weatherVal").textContent = fmtTemp(c, 0);
+    var el = document.getElementById("controlOutdoor");
+    if (el) el.textContent = fmtTemp(c, 0);
+  }
 
+  fetch("https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/12.285/lat/58.283/data.json")
+    .then(function (r) { return r.json(); })
+    .then(function (wx) {
+      var params = wx.timeSeries[0].parameters;
+      var tParam = params.filter(function (p) { return p.name === "t"; })[0];
+      if (tParam) setLiveWeather(tParam.values[0]);
+    })
+    .catch(function () { /* live weather unavailable — leave the simulated reading in place */ });
   function fmtDate(iso) {
     var d = new Date(iso);
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
@@ -236,8 +249,7 @@
   }
 
   function renderWeatherChip() {
-    var lastOutdoor = DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c;
-    document.getElementById("weatherVal").textContent = fmtTemp(lastOutdoor, 0);
+   
   }
 
   // Decorative weather effect behind the Weekly temperature page, based on
@@ -842,9 +854,7 @@
   function renderBuildings() {
     if (!DATA || !DATA.buildings) return;
     var list = DATA.buildings;
-    var outdoor = list.length ? list[0].outdoor_c : null;
-    document.getElementById("controlOutdoor").textContent = outdoor !== null ? fmtTemp(outdoor, 0) : "—";
-
+  
     var container = document.getElementById("buildingList");
     // remove previously rendered rows (keep the header row)
     Array.prototype.slice.call(container.querySelectorAll(".b-row:not(.b-head)")).forEach(function (el) { el.remove(); });
