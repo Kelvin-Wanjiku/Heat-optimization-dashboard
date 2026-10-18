@@ -209,14 +209,14 @@
 
       <div class="card">
         <h2>Data source</h2>
-        <p class="card-sub">Running on a real digital-twin simulation: a full year (2025) of one classroom — Room 101, 60 m², Trollhättan — under real SMHI weather (Såtenäs station; Vänersborg was tried first but only reports temperature every quarter-hour). The data is simulated, not measured, and that's stated throughout the dashboard — see the "illustrative"/confidence tags below.</p>
-        <p class="hint">Raw twin export: <code>data/twin_dashboard.json</code> (format 1.0, spec at <code>data/dashboard-format.md</code>). <code>data/SCHEMA.md</code> documents the shape this dashboard actually reads (<code>data/dashboard_data.json</code>), built from the twin export by <code>generate_data.py</code>. The classroom parameter research behind it is at <code>data/params_research.md</code>.</p>
+        <p class="card-sub">Running on a real digital-twin simulation: a full year (2025) of one classroom — Room 101, 60 m², Trollhättan — under real SMHI weather Såtenäs station</p>
+        <p class="hint">The data issimulated,not measured. Built from the twin </p>
       </div>
 
       <div class="card">
         <h2>Scenarios</h2>
         <p class="card-sub">The twin simulated four control scenarios; this dashboard charts the two extremes of that story.</p>
-        <p class="hint"><strong>Baseline ("Today")</strong> — the building's actual, undiagnosed control faults: roughly half the radiator thermostatic valves stuck open, an outdoor-temperature sensor reading about 1.5 °C low with a one-hour lag, and a manual 2 °C morning boost layered on top. <strong>Optimized ("Smart control")</strong> — coordinated smart-valve control with those faults fixed. Two more scenarios exist in the raw data but aren't charted here yet — "faults fixed, same old controller" and "smart control running on the old faulty valves" — see <code>data/dashboard-format.md</code>.</p>
+        <p class="hint"><strong>Baseline ("Today")</strong> — the building's actual, undiagnosed control faults: roughly half the radiator thermostatic valves stuck open, an outdoor-temperature sensor reading about 1.5 °C low with a one-hour lag, and a manual 2 °C morning boost layered on top. <strong>Optimized ("Smart control")</strong> — coordinated smart-valve control with those faults fixed. Two more scenarios exist in the raw data but aren't charted here yet — "faults fixed, same old controller" and "smart control running on the old faulty valves"</p>
       </div>
 
       <div class="card">
@@ -226,11 +226,11 @@
         <p class="hint">Q<sub>radiator</sub>: twin, from valve position &amp; supply temperature, capped at the 3 kW rated output. Q<sub>internal</sub>: pupils + teacher + lighting + equipment while occupied. Q<sub>solar</sub>: irradiance &times; window area &times; glazing g-value. Q<sub>vent</sub>: ventilation loss, net of heat-recovery efficiency — the lever the "optimized" scenario uses. Full term-by-term definitions: <code>data/room_energy_balance.md</code>.</p>
       </div>
 
-      <div class="card">
+     <!--  <div class="card">
         <h2>Heat-usage forecast model <span class="confidence-pill assumed">preview</span></h2>
         <p class="card-sub">A teammate is separately training a short-horizon forecasting model, trained on a public dataset rather than this twin. It isn't connected to this dashboard yet — the forecast card on the Weekly temperature page is illustrative, not live output.</p>
         <p class="hint">Predicts heat usage 1 h / 6 h / 24 h ahead, conditioned on the past 24 h or 168 h (1 week) of heat usage. Features: time, past heat input, outdoor temperature, wind speed, wind direction, solar energy — chosen partly because they're simple enough for real IoT sensors to supply. Training data: ~200,000 cleaned hourly readings (from 2.2 million raw) across 48 Oslo school buildings — the SINTEF COFACTOR-SBHUB Oslo dataset (S.K. Lien et al., <em>Data in Brief</em> 63, 2025, doi:10.1016/j.dib.2025.112288).</p>
-      </div>
+      </div> -->
 
       <div class="card">
         <h2>Validation benchmarks</h2>
