@@ -100,7 +100,8 @@
         fmtDate(DATA.meta.period_start) + " – " + fmtDate(DATA.meta.period_end);
       var scopeEl = document.getElementById("scenarioScope");
       if (scopeEl && DATA.meta.scenario_scope) scopeEl.textContent = DATA.meta.scenario_scope;
-      renderAll();
+      renderAll();renderAll();
+setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // shown until/unless live weather loads
     })
     .catch(function (err) {
       document.getElementById("subtitle").innerHTML =
@@ -121,7 +122,11 @@
       var tParam = params.filter(function (p) { return p.name === "t"; })[0];
       if (tParam) setLiveWeather(tParam.values[0]);
     })
-    .catch(function () { /* live weather unavailable — leave the simulated reading in place */ });
+    .catch(function () {
+  if (DATA && DATA.timeseries && DATA.timeseries.length) {
+    setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c);
+  }
+});
   function fmtDate(iso) {
     var d = new Date(iso);
     return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
