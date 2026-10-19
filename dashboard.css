@@ -268,6 +268,15 @@ button, input { font-family: inherit; }
 .seg button[aria-pressed="true"] { background: var(--brand); color: #fff; font-weight: 600; }
 .view-toggle { margin-left: auto; }
 
+.type-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--surface) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a969b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") no-repeat right 9px center / 13px 13px;
+  color: var(--ink); font-family: inherit; font-size: 12.5px; font-weight: 500;
+  padding: 7px 28px 7px 11px; cursor: pointer; min-width: 150px;
+}
+.type-select:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+
 /* ------------------------------------------------------------------ */
 /* KPI tiles                                                            */
 /* ------------------------------------------------------------------ */
@@ -342,6 +351,97 @@ table.data-table th { color: var(--ink-muted); font-weight: 600; font-size: 11px
 .control-legend .dot.heating { background: var(--series-baseline); }
 .control-legend .dot.idle { background: var(--ink-muted); }
 .control-legend .dot.attention { background: var(--critical); }
+
+/* Control panel — summary grid ("glance" tiles above the building list) */
+.summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px; margin-bottom: 18px;
+}
+.summary-tile {
+  position: relative;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 14px 16px; box-shadow: var(--shadow-1);
+  appearance: none; font-family: inherit; text-align: left; cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px;
+  box-shadow: var(--shadow-1), inset 3px 0 0 var(--tile-accent, transparent);
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.summary-tile:hover { box-shadow: 0 2px 10px rgba(15,23,24,0.12), inset 3px 0 0 var(--tile-accent, transparent); transform: translateY(-1px); }
+.summary-tile:active { transform: translateY(0); }
+
+/* A small glyph pinned to the top-right corner of each tile, echoing the
+   category's meaning (flame, sliders, refresh-loop, warning triangle) — a
+   quicker visual anchor than the dot alone when scanning five tiles at once. */
+.summary-tile .st-icon {
+  position: absolute; top: 13px; right: 14px; width: 19px; height: 19px;
+  opacity: 0.8;
+}
+.summary-tile .st-icon svg { width: 100%; height: 100%; display: block; }
+
+.summary-tile .st-label {
+  font-size: 11.5px; color: var(--ink-muted); display: flex; align-items: center; gap: 6px;
+  padding-right: 24px; /* keep the label clear of the corner icon */
+}
+.summary-tile .st-label .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.summary-tile .st-value { font-size: 26px; font-weight: 650; line-height: 1.1; color: var(--ink); }
+
+.summary-tile.heating { --tile-accent: var(--warning); }
+.summary-tile.heating .st-label .dot { background: var(--warning); }
+.summary-tile.heating .st-icon { color: var(--warning); }
+
+.summary-tile.idle { --tile-accent: var(--ink-muted); }
+.summary-tile.idle .st-label .dot { background: var(--ink-muted); }
+.summary-tile.idle .st-icon { color: var(--ink-muted); opacity: 0.55; }
+
+.summary-tile.manual { --tile-accent: var(--brand); }
+.summary-tile.manual .st-label .dot { background: var(--brand); }
+.summary-tile.manual .st-icon { color: var(--brand); }
+
+.summary-tile.auto { --tile-accent: var(--good); }
+.summary-tile.auto .st-label .dot { background: var(--good); }
+.summary-tile.auto .st-icon { color: var(--good); }
+
+.summary-tile.attention { --tile-accent: var(--critical); }
+.summary-tile.attention .st-label .dot { background: var(--critical); }
+.summary-tile.attention .st-value { color: var(--critical); }
+.summary-tile.attention .st-icon { color: var(--critical); }
+
+/* Only when there's actually something to see to — a clean zero shouldn't
+   look alarming. A slow pulse on the corner icon reads as "worth a look"
+   without being a flashing, distracting klaxon. */
+.summary-tile.attention.urgent { background: var(--critical-wash); border-color: rgba(194,59,59,0.35); }
+.summary-tile.attention.urgent .st-icon { animation: tile-urgent-pulse 2s ease-in-out infinite; }
+@keyframes tile-urgent-pulse {
+  0%, 100% { opacity: 0.85; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.12); }
+}
+
+/* Small click-through popover listing building names for a summary tile */
+.summary-popover {
+  position: fixed; z-index: 40;
+  min-width: 200px; max-width: 280px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(10,15,16,0.22);
+  display: flex; flex-direction: column;
+}
+.summary-popover[hidden] { display: none; }
+.summary-popover-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.summary-popover-head button {
+  appearance: none; border: none; background: transparent; color: var(--ink-muted);
+  font-size: 17px; line-height: 1; cursor: pointer; padding: 0 2px;
+}
+.summary-popover-head button:hover { color: var(--ink); }
+.summary-popover ul { list-style: none; margin: 0; padding: 6px 0; max-height: 220px; overflow-y: auto; }
+.summary-popover li {
+  font-size: 12.5px; color: var(--ink-secondary); padding: 6px 12px; cursor: pointer;
+}
+.summary-popover li:hover { background: var(--surface-2); color: var(--ink); }
+.summary-popover li.empty { color: var(--ink-muted); font-style: italic; cursor: default; }
+.summary-popover li.empty:hover { background: none; color: var(--ink-muted); }
 
 .building-list {
   border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden;
@@ -471,7 +571,7 @@ table.param-table th, table.param-table td { text-align: left; }
 
 .detail-drawer {
   position: fixed; z-index: 31; right: 0; top: 0; bottom: 0;
-  width: min(480px, 100vw);
+  width: min(620px, 100vw);
   background: #0e1517; color: #d7e2e2;
   font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   transform: translateX(100%); transition: transform 0.2s ease;

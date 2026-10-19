@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Kraftstaden AB — Heat Control</title>
-<link rel="stylesheet" href="dashboard.css?v=11" />
+<link rel="stylesheet" href="dashboard.css?v=16" />
 </head>
 <body>
 
@@ -149,6 +149,8 @@
 
     <!-- ===================== Control panel ===================== -->
     <section class="view" id="view-control">
+      <div class="summary-grid" id="summaryGrid"></div>
+
       <div class="control-toolbar">
         <p class="control-sub">Outdoor temperature today: <strong id="controlOutdoor">—</strong> · heaters shown in <strong>Auto</strong> follow this reading</p>
         <div class="control-legend">
@@ -156,6 +158,11 @@
           <span><span class="dot idle"></span>Idle</span>
           <span><span class="dot attention"></span>Needs attention</span>
         </div>
+      </div>
+
+      <div class="filters" id="typeFilterWrap">
+        <label for="typeSelect">Type</label>
+        <select class="type-select" id="typeSelect" aria-label="Filter buildings by type"></select>
       </div>
 
       <div class="building-list" id="buildingList">
@@ -170,6 +177,15 @@
         <!-- rows injected by dashboard.js -->
       </div>
     </section>
+
+    <!-- small popup for summary-tile click-through lists -->
+    <div class="summary-popover" id="summaryPopover" hidden>
+      <div class="summary-popover-head">
+        <span id="summaryPopoverTitle">—</span>
+        <button type="button" id="summaryPopoverClose" aria-label="Close">&times;</button>
+      </div>
+      <ul id="summaryPopoverList"></ul>
+    </div>
 
     <!-- ===================== Settings ===================== -->
     <section class="view" id="view-settings" hidden>
@@ -214,7 +230,7 @@
       <div class="card">
         <h2>Scenarios</h2>
         <p class="card-sub">The twin simulated four control scenarios; this dashboard charts the two extremes of that story.</p>
-        <p class="hint"><strong>Baseline ("Today")</strong> — the building's actual, undiagnosed control faults: roughly half the radiator thermostatic valves stuck open, an outdoor-temperature sensor reading about 1.5 °C low with a one-hour lag, and a manual 2 °C morning boost layered on top. 
+        <p class="hint"><strong>Baseline ("Today")</strong> — the building's actual, undiagnosed control faults: roughly half the radiator thermostatic valves stuck open, an outdoor-temperature sensor reading about 1.5 °C low with a one-hour lag, and a manual 2 °C morning boost layered on top.
         </n><strong>Optimized ("Smart control")</strong> — coordinated smart-valve control with those faults fixed. Two more scenarios exist in the raw data but aren't charted here yet — "faults fixed, same old controller" and "smart control running on the old faulty valves"</p>
       </div>
 
@@ -286,6 +302,6 @@
   </div>
 </aside>
 
-<script src="dashboard.js?v=12"></script>
+<script src="dashboard.js?v=17"></script>
 </body>
 </html>

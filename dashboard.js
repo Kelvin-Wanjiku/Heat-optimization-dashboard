@@ -115,12 +115,17 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
     if (el) el.textContent = fmtTemp(c, 0);
   }
 
-  fetch("https://opendata-download-metfcst.smhi.se/api/category/pmp3g/version/2/geotype/point/lon/12.285/lat/58.283/data.json")
+  // Open-Meteo's current_weather field is built specifically for "right now"
+  // (not a forecast time series to search through), free, keyless, and has
+  // no CORS restriction for browser fetches — unlike weather.com, which has
+  // no public API and blocks cross-origin requests, so its page can't be
+  // read directly from client-side JS.
+  fetch("https://api.open-meteo.com/v1/forecast?latitude=58.283&longitude=12.285&current_weather=true")
     .then(function (r) { return r.json(); })
     .then(function (wx) {
-      var params = wx.timeSeries[0].parameters;
-      var tParam = params.filter(function (p) { return p.name === "t"; })[0];
-      if (tParam) setLiveWeather(tParam.values[0]);
+      if (wx.current_weather && typeof wx.current_weather.temperature === "number") {
+        setLiveWeather(wx.current_weather.temperature);
+      }
     })
     .catch(function () {
   if (DATA && DATA.timeseries && DATA.timeseries.length) {
@@ -206,10 +211,6 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
         '</div>';
     }).join("");
 
-    var noteEl = document.getElementById("forecastNote");
-    if (noteEl) noteEl.textContent = f.status_note;
-    var trainedEl = document.getElementById("forecastTrainedOn");
-    if (trainedEl) trainedEl.textContent = "Trained on: " + f.trained_on;
     var featEl = document.getElementById("forecastFeatures");
     if (featEl) {
       featEl.textContent = "Features: " + f.features.join(", ") + ". History window: " + f.history_windows.join(" or ") + ".";
@@ -254,7 +255,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   }
 
   function renderWeatherChip() {
-   
+
   }
 
   // Decorative weather effect behind the Weekly temperature page, based on
@@ -856,10 +857,158 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Control panel — summary grid ("glance" tiles above the building list)
+  // and the building-type filter. Summary counts always reflect ALL
+  // buildings regardless of the active type filter, since the point is a
+  // quick system-wide read before narrowing the list below.
+  // ---------------------------------------------------------------------
+  var typeFilter = "all";
+
+  function buildingSummaryStats(list) {
+    var groups = { heating: [], idle: [], manual: [], auto: [], attention: [] };
+    list.forEach(function (b) {
+      var st = buildingState(b);
+      var entry = { id: b.id, name: b.name };
+      if (st.status === "heating") groups.heating.push(entry);
+      else groups.idle.push(entry);
+      if (st.mode === "manual") groups.manual.push(entry);
+      else groups.auto.push(entry);
+      if (st.attention) groups.attention.push(entry);
+    });
+    return groups;
+  }
+
+  // One glyph per tile, echoing its meaning (flame = actively heating,
+  // sliders = under manual override, refresh = following Auto, triangle =
+  // the one that needs a human). Drawn at a consistent 24x24 viewBox so
+  // they can share one CSS rule for size/position.
+  var SUMMARY_ICONS = {
+    heating: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5-2 1.6-3 3.5-3 5.5a7 7 0 0 0 7 7Z"/></svg>',
+    idle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="10" y1="9" x2="10" y2="15"/><line x1="14" y1="9" x2="14" y2="15"/></svg>',
+    manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><circle cx="14" cy="7" r="2" fill="currentColor" stroke="none"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="17" r="2" fill="currentColor" stroke="none"/></svg>',
+    auto: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>',
+    attention: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 16.5h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'
+  };
+
+  var SUMMARY_TILES = [
+    { key: "heating", label: "Heating" },
+    { key: "idle", label: "Idle" },
+    { key: "manual", label: "Manual" },
+    { key: "auto", label: "Auto" },
+    { key: "attention", label: "Needs attention" }
+  ];
+
+  function renderSummary() {
+    if (!DATA || !DATA.buildings) return;
+    var groups = buildingSummaryStats(DATA.buildings);
+    var grid = document.getElementById("summaryGrid");
+    if (!grid) return;
+    grid.innerHTML = SUMMARY_TILES.map(function (t) {
+      var names = groups[t.key] || [];
+      var urgent = t.key === "attention" && names.length > 0;
+      return '<button type="button" class="summary-tile ' + t.key + (urgent ? ' urgent' : '') + '" data-category="' + t.key + '">' +
+        '<span class="st-icon">' + SUMMARY_ICONS[t.key] + '</span>' +
+        '<span class="st-label"><span class="dot"></span>' + escapeHtml(t.label) + '</span>' +
+        '<span class="st-value">' + names.length + '</span>' +
+        '</button>';
+    }).join("");
+    grid.querySelectorAll(".summary-tile").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var cat = btn.getAttribute("data-category");
+        var tileDef = SUMMARY_TILES.filter(function (t) { return t.key === cat; })[0];
+        showSummaryPopover(tileDef ? tileDef.label : cat, groups[cat] || [], btn);
+      });
+    });
+  }
+
+  var summaryPopover = document.getElementById("summaryPopover");
+  var summaryPopoverTitle = document.getElementById("summaryPopoverTitle");
+  var summaryPopoverList = document.getElementById("summaryPopoverList");
+  var summaryPopoverClose = document.getElementById("summaryPopoverClose");
+
+  function showSummaryPopover(title, entries, anchorEl) {
+    if (!summaryPopover) return;
+    summaryPopoverTitle.textContent = title + " (" + entries.length + ")";
+    summaryPopoverList.innerHTML = entries.length
+      ? entries.map(function (e) { return '<li data-id="' + escapeHtml(e.id) + '">' + escapeHtml(e.name) + '</li>'; }).join("")
+      : '<li class="empty">No buildings</li>';
+    // Clicking a name jumps straight to that building's detail drawer
+    // (rooms, HVAC, alarms, etc.) instead of leaving the person to scroll
+    // the full list to find it.
+    summaryPopoverList.querySelectorAll("li[data-id]").forEach(function (li) {
+      li.addEventListener("click", function () {
+        closeSummaryPopover();
+        openDetail(li.getAttribute("data-id"));
+      });
+    });
+    summaryPopover.hidden = false;
+
+    // Position just below the clicked tile, nudged left if it would overflow
+    // the viewport's right edge.
+    var rect = anchorEl.getBoundingClientRect();
+    var top = rect.bottom + 8;
+    var left = rect.left;
+    var popW = summaryPopover.offsetWidth || 240;
+    if (left + popW > window.innerWidth - 12) left = window.innerWidth - popW - 12;
+    if (left < 12) left = 12;
+    summaryPopover.style.top = top + "px";
+    summaryPopover.style.left = left + "px";
+  }
+  function closeSummaryPopover() {
+    if (summaryPopover) summaryPopover.hidden = true;
+  }
+  if (summaryPopoverClose) summaryPopoverClose.addEventListener("click", closeSummaryPopover);
+  document.addEventListener("click", function (e) {
+    if (!summaryPopover || summaryPopover.hidden) return;
+    if (summaryPopover.contains(e.target)) return;
+    if (e.target.closest(".summary-tile")) return;
+    closeSummaryPopover();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeSummaryPopover();
+  });
+
+  var typeSelectWired = false;
+  function renderTypeFilter() {
+    if (!DATA || !DATA.buildings) return;
+    var sel = document.getElementById("typeSelect");
+    if (!sel) return;
+    var types = [];
+    DATA.buildings.forEach(function (b) {
+      if (types.indexOf(b.type) === -1) types.push(b.type);
+    });
+    var options = [{ value: "all", label: "All buildings" }].concat(types.map(function (t) {
+      return { value: t, label: t };
+    }));
+    // Rebuild options only when the set actually changed, so an open
+    // dropdown or mid-interaction selection isn't disturbed by re-renders
+    // triggered elsewhere (mode toggles, the room-sim tick, etc).
+    var wanted = options.map(function (o) { return o.value; }).join("|");
+    var have = Array.prototype.map.call(sel.options, function (o) { return o.value; }).join("|");
+    if (wanted !== have) {
+      sel.innerHTML = options.map(function (o) {
+        return '<option value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</option>';
+      }).join("");
+    }
+    sel.value = typeFilter;
+    if (!typeSelectWired) {
+      typeSelectWired = true;
+      sel.addEventListener("change", function () {
+        typeFilter = sel.value;
+        renderBuildings();
+      });
+    }
+  }
+
   function renderBuildings() {
     if (!DATA || !DATA.buildings) return;
-    var list = DATA.buildings;
-  
+    renderSummary();
+    renderTypeFilter();
+    var list = typeFilter === "all"
+      ? DATA.buildings
+      : DATA.buildings.filter(function (b) { return b.type === typeFilter; });
+
     var container = document.getElementById("buildingList");
     // remove previously rendered rows (keep the header row)
     Array.prototype.slice.call(container.querySelectorAll(".b-row:not(.b-head)")).forEach(function (el) { el.remove(); });
