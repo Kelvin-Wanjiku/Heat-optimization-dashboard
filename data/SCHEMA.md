@@ -1,9 +1,9 @@
 # dashboard_data.json — schema
 
-This is the **only** file the dashboard reads (`dashboard.html` fetches
-`data/dashboard_data.json`). When your teammate brings real data from
-Kraftstaden / Trollhättan Energi, build a new file matching this exact shape
-and drop it in at the same path — nothing in `dashboard.html` needs to change.
+This is the **only** file the dashboard reads (`index.html` fetches
+`data/dashboard_data.json`). real data from
+Kraftstaden / Trollhättan Energi should be placed here, build a new file matching this exact shape
+and drop it in / at the same path — nothing in `index.html` needs to change.
 
 ```jsonc
 {

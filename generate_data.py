@@ -12,7 +12,7 @@ two controllers:
                setback + ventilation heat recovery (FTX retrofit)
 
 The physics is the real room energy-balance contract agreed with the heat-model
-teammate (data/room_energy_balance.md):
+(data/room_energy_balance.md):
 
     C * dT_in/dt = Q_radiator + Q_internal + Q_solar - (T_in - T_out)/R - Q_vent
 
@@ -393,7 +393,7 @@ buildings = [
 ]
 
 # ---------------------------------------------------------------------------
-# Heat price + cost summary — from the teammate's classroom-twin parameter
+# Heat price + cost summary — from  classroom-twin parameter
 # research (see data/params_research.md). 1.10-1.35 SEK/kWh; we display the
 # midpoint and keep the range alongside it so the KPI reads as an estimate,
 # not false precision.
@@ -442,7 +442,7 @@ benchmarks = [
 
 # ---------------------------------------------------------------------------
 # Model parameters — the classroom digital-twin parameter research a
-# teammate brought in (params_research.md v0.1, room_energy_balance.md v0.1).
+#  brought in (params_research.md v0.1, room_energy_balance.md v0.1).
 # This is the data the heat model (owned separately) runs on; the dashboard
 # just surfaces it for transparency/review. confidence: sourced | derived |
 # assumed | unknown.
@@ -522,7 +522,7 @@ output = {
 # ---------------------------------------------------------------------------
 # PART 2 — overlay the real digital-twin data.
 #
-# A teammate's digital twin (SINTEF-style room energy-balance simulation)
+# A digital twin (SINTEF-style room energy-balance simulation)
 # produced a full simulated year (2025) of a real classroom — Room 101,
 # 60 m², Trollhättan — under four control scenarios, driven by real SMHI
 # weather (Såtenäs station, since Vänersborg only has quarterly-hour
@@ -700,17 +700,16 @@ open_items.append(
 open_items.append(
     "The heat-usage forecast card is illustrative only — generated from the twin's own totals as a "
     "stand-in, not real model output. The actual model (features, horizons, training data) is "
-    "described by a teammate but not yet trained/connected; swap data[\"forecast\"] for real output "
+    "described but not yet trained/connected; swap data[\"forecast\"] for real output "
     "once it exists."
 )
 output["model_parameters"] = model_parameters
 output["open_items"] = open_items
 
 # ---------------------------------------------------------------------------
-# Forecast (preview) — a teammate is training a short-horizon heat-usage
+# Forecast (preview) —  training a short-horizon heat-usage
 # model ("Oslo dataset": ~200k cleaned hourly rows, from 2.2M raw, across 48
-# Oslo school buildings — SINTEF COFACTOR-SBHUB, Lien et al., Data in Brief
-# 2025) but hasn't shared trained output yet. These numbers are NOT model
+# Oslo school buildings — SINTEF COFACTOR-SBHUB, Lien et al., These numbers are NOT model
 # predictions — they're derived from the twin's own recent totals so the UI
 # slot looks plausible, and are labeled "illustrative" everywhere they render.
 # ---------------------------------------------------------------------------

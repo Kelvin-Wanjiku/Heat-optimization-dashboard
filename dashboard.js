@@ -192,7 +192,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   }
 
   // ---------------------------------------------------------------------
-  // Heat-usage forecast (preview) — a teammate is training a short-horizon
+  // Heat-usage forecast (preview) — 
   // model (SINTEF COFACTOR-SBHUB Oslo school dataset) but hasn't shared
   // trained output yet. DATA.forecast.status === "illustrative" means these
   // numbers are a stand-in, not real predictions, so every render keeps the
@@ -219,7 +219,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
 
   // ---------------------------------------------------------------------
   // Settings — validation benchmarks + model parameters (from the
-  // teammate's classroom-twin parameter research, data/params_research.md).
+  // classroom-twin parameter research, data/params_research.md).
   // Static per load: reuses the .kpi tile and .data-table markup already
   // styled for the Weekly temperature page, so nothing new to theme.
   // ---------------------------------------------------------------------
