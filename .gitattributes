@@ -1,0 +1,5 @@
+# The model files are checked against SHA-256 sums; line-ending conversion on Windows would change them.
+oslo_ai/models/** -text
+oslo_ai/frozen/** -text
+*.pt binary
+*.parquet binary

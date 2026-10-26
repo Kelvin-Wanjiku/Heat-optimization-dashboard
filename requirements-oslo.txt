@@ -1,0 +1,10 @@
+# Only needed to rebuild data/oslo_ai.json or to retrain (the dashboard itself needs none of this). Tested with Python 3.13.
+pandas>=2.2
+numpy>=1.26
+pyarrow>=17
+pyyaml>=6
+lightgbm>=4.3
+holidays>=0.50
+python-dateutil>=2.9
+scikit-learn>=1.4
+torch>=2.2
