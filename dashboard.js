@@ -101,6 +101,7 @@
       var scopeEl = document.getElementById("scenarioScope");
       if (scopeEl && DATA.meta.scenario_scope) scopeEl.textContent = DATA.meta.scenario_scope;
       renderAll();renderAll();
+      injectOsloBuildings();
 setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // shown until/unless live weather loads
     })
     .catch(function (err) {
@@ -192,34 +193,469 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   }
 
   // ---------------------------------------------------------------------
-  // Heat-usage forecast (preview) — 
-  // model (SINTEF COFACTOR-SBHUB Oslo school dataset) but hasn't shared
-  // trained output yet. DATA.forecast.status === "illustrative" means these
-  // numbers are a stand-in, not real predictions, so every render keeps the
-  // "illustrative" badge visible rather than letting it read like live output.
+  // Heat-usage forecast + smart-control results from the teammate's PAI700
+  // project (Oslo schools). data/oslo_ai.json is exported by
+  // export_oslo_data.py from the teammate's replay feed, forecast service and
+  // twin service. These are real model outputs, but for three OSLO schools
+  // and a simulated 60 m2 classroom, not for Trollhättan buildings.
   // ---------------------------------------------------------------------
-  function renderForecast() {
-    var f = DATA.forecast;
-    var row = document.getElementById("forecastRow");
-    if (!row || !f) return;
+  var OSLO = null;
+  var oslo = { b: 0, h: "24", range: "2023-01-16",
+               twinSel: { b: 0, week: "2023-02-27", days: "5" }, twin: { b: 0, week: "2023-02-27", days: "5" },
+               drawer: { fc: true, h: "24", range: "7" } };
 
-    row.innerHTML = f.horizons.map(function (h) {
-      return '<div class="kpi">' +
-        '<div class="label">' + escapeHtml(h.label) + '</div>' +
-        '<div class="value" style="font-size:19px;">' + fmtNum(h.predicted_kwh) + ' kWh</div>' +
-        '<div class="sub">illustrative, not model output</div>' +
-        '</div>';
+  fetch("data/oslo_ai.json")
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(function (json) {
+      OSLO = json;
+      OSLO.buildings.forEach(function (B) {
+        B.mean_kw = B.heat_kw.reduce(function (a, v) { return a + (v || 0); }, 0) / B.heat_kw.length;
+      });
+      var mondays = OSLO.twin.mondays;
+      if (mondays.indexOf(oslo.range) < 0) oslo.range = mondays[0];
+      if (mondays.indexOf(oslo.twin.week) < 0) { oslo.twin.week = mondays[0]; oslo.twinSel.week = mondays[0]; }
+      initOsloControls();
+      initReplayBar();
+      injectOsloBuildings();
+      renderForecast();
+      renderTwin();
+    })
+    .catch(function (err) {
+      var sub = document.getElementById("aiSub");
+      if (sub) sub.innerHTML = "Could not load <code>data/oslo_ai.json</code> (" + escapeHtml(String(err.message)) + "). Run <code>export_oslo_data.py</code> or copy the file into <code>data/</code>.";
+      var t = document.getElementById("twinSub");
+      if (t) t.textContent = "No Oslo data loaded.";
+    });
+
+  var OSLO_MS = 3600000;
+  function osloT0() { return Date.parse(OSLO.meta.window_first + ":00Z"); }
+  function osloStamp(ms) { return new Date(ms).toISOString().slice(0, 19); }
+  function weekLabel(startIso, days) {
+    var a = new Date(startIso + "T00:00:00Z"), b = new Date(a.getTime() + ((days || 5) - 1) * 86400000);
+    var f = function (d) { return d.toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" }); };
+    return f(a) + " – " + f(b);
+  }
+  function pct(v, d) { return (v * 100).toFixed(d === undefined ? 1 : d) + " %"; }
+  function opt(value, label, selected) { return '<option value="' + value + '"' + (selected ? " selected" : "") + ">" + escapeHtml(label) + "</option>"; }
+
+  // ---------------------------------------------------------------------
+  // Replay: plays the Oslo window hour by hour, like the teammate's feed.
+  // The three Oslo schools sit in the Control panel list with the others and
+  // update as the replay clock moves. "Heating" = heat use of at least 60 %
+  // of the school's average; "Needs attention" = heat use more than 40 % off
+  // what the AI forecast made 24 h earlier.
+  // ---------------------------------------------------------------------
+  // Every school has its own clock (replay.sch[k]). The bar under the list plays all of them together;
+  // the Play button in a school's drawer plays just that school.
+  var replay = { speed: 24, timer: null, sch: [] };
+  function replayStart() { return Math.round((Date.parse(OSLO.meta.replay_start + ":00Z") - osloT0()) / OSLO_MS); }
+  function replayEnd() { return OSLO.meta.hours - 1; }
+  function resetSchool(k) { replay.sch[k] = { i: replayStart(), playing: false, ended: false }; }
+  function anyPlaying() { return replay.sch.some(function (x) { return x.playing; }); }
+
+  function initReplayBar() {
+    OSLO.buildings.forEach(function (B, k) { resetSchool(k); });
+    document.getElementById("replayBar").hidden = false;
+    document.getElementById("replayPlay").addEventListener("click", function () {
+      if (anyPlaying()) { replay.sch.forEach(function (x) { x.playing = false; }); }
+      else { replay.sch.forEach(function (x, k) { if (x.ended) resetSchool(k); replay.sch[k].playing = true; }); }
+      syncTimer(); onReplayChange();
+    });
+    document.getElementById("replayRestart").addEventListener("click", function () {
+      OSLO.buildings.forEach(function (B, k) { resetSchool(k); });
+      syncTimer(); onReplayChange();
+    });
+    document.getElementById("replaySpeed").addEventListener("change", function (e) { setReplaySpeed(e.target.value); });
+    updateReplayBar();
+  }
+  function setReplaySpeed(v) {
+    replay.speed = Number(v);
+    var a = document.getElementById("replaySpeed"); if (a) a.value = String(v);
+    var d = document.getElementById("odSpeed"); if (d) d.value = String(v);
+  }
+  function syncTimer() {
+    if (anyPlaying() && !replay.timer) {
+      replay.timer = setInterval(function () {
+        replay.sch.forEach(function (x) {
+          if (!x.playing) return;
+          x.i = Math.min(replayEnd(), x.i + replay.speed);
+          if (x.i >= replayEnd()) { x.ended = true; x.playing = false; }
+        });
+        if (!anyPlaying()) syncTimer();
+        onReplayChange();
+      }, 1000);
+    } else if (!anyPlaying() && replay.timer) {
+      clearInterval(replay.timer); replay.timer = null;
+    }
+  }
+  function clockText(i) {
+    var iso = new Date(osloT0() + i * OSLO_MS).toISOString();
+    return iso.slice(0, 10) + " " + iso.slice(11, 16);
+  }
+  function updateReplayBar() {
+    if (!OSLO || !replay.sch.length) return;
+    var same = replay.sch.every(function (x) { return x.i === replay.sch[0].i; });
+    var allEnded = replay.sch.every(function (x) { return x.ended; });
+    document.getElementById("replayPlay").textContent = anyPlaying() ? "Pause" : (allEnded ? "Replay again" : "Play all");
+    document.getElementById("replayClock").textContent = same ? clockText(replay.sch[0].i) : "Mixed clocks";
+    var a = replayStart(), z = replayEnd();
+    var frac = (replay.sch.reduce(function (m, x) { return Math.max(m, x.i); }, 0) - a) / (z - a);
+    document.getElementById("replayFill").style.width = Math.round(frac * 100) + "%";
+    document.getElementById("replayPhase").textContent = allEnded ? "End of the window (31 Mar 2023)" :
+      (same ? Math.round(frac * 100) + " % of the Oct – Mar window" : "schools were started separately, see each school panel");
+  }
+  function onReplayChange() {
+    updateReplayBar();
+    renderBuildings();
+    if (activeBuildingId) {
+      var b = findBuilding(activeBuildingId);
+      if (b && b.oslo !== undefined) renderOsloDetail(b);
+    }
+  }
+
+  // live numbers for one Oslo school at the replay clock
+  function osloLive(b) {
+    var B = OSLO.buildings[b.oslo], i = replay.sch[b.oslo].i;
+    var heat = B.heat_kw[i], tout = B.tout_c[i], fc = B.forecast_kw["24"][i];
+    var last24 = 0, k;
+    for (k = Math.max(0, i - 23); k <= i; k++) last24 += B.heat_kw[k] || 0;
+    var dev = (fc && heat !== null) ? heat / fc - 1 : null;
+    var heating = heat !== null && heat >= 0.6 * B.mean_kw;
+    var attention = dev !== null && Math.abs(dev) > 0.4 && heat > 0.3 * B.mean_kw;
+    return { B: B, i: i, heat: heat, tout: tout, fc: fc, dev: dev, last24: last24, heating: heating, attention: attention };
+  }
+  function osloState(b) {
+    var L = osloLive(b);
+    return { mode: "auto", heaterOn: L.heating, status: L.heating ? "heating" : "idle", attention: L.attention };
+  }
+
+  function injectOsloBuildings() {
+    if (!OSLO || !DATA || !DATA.buildings) return;
+    DATA.buildings = DATA.buildings.filter(function (b) { return b.oslo === undefined; });
+    OSLO.buildings.forEach(function (B, idx) {
+      DATA.buildings.push({
+        id: "oslo-" + B.id, code: "OSLO-" + B.id, name: "School " + B.id + " — Oslo (replay)",
+        type: "School", type_label: "School · Oslo", oslo: idx,
+        target_c: null, indoor_c: null, outdoor_c: null, mode: "auto", status: "idle", heater_on: false, attention: false,
+        updated_min_ago: 0, co2_ppm: 0, energy_kw: 0, rooms: [], ahus: []
+      });
+    });
+    renderBuildings();
+  }
+
+  // ---- Oslo school detail drawer ----
+  function osloDrawerRows(B, L) {
+    var d = oslo.drawer, t0 = osloT0(), from = replayStart();
+    if (d.range !== "all") from = Math.max(from, L.i - Number(d.range) * 24 + 1);
+    var fc = B.forecast_kw[d.h], rows = [];
+    for (var i = from; i <= L.i; i++) {
+      if (B.heat_kw[i] === null) continue;
+      if (d.fc && fc[i] === null) continue;
+      rows.push({ timestamp: osloStamp(t0 + i * OSLO_MS), measured: B.heat_kw[i], forecast: d.fc ? fc[i] : 0, tout: B.tout_c[i] });
+    }
+    return rows;
+  }
+
+  function renderOsloDetail(b) {
+    var L = osloLive(b), B = L.B, d = oslo.drawer, t0 = osloT0();
+    document.getElementById("detailName").textContent = b.name;
+    document.getElementById("detailCode").textContent = b.code + " · School · measured data replayed, " + Math.round(B.floor_area_m2).toLocaleString("en-GB") + " m²";
+    var statusEl = document.getElementById("detailStatus");
+    statusEl.className = "detail-status " + (L.attention ? "attention" : "normal");
+    statusEl.textContent = L.attention ? "NEEDS ATTENTION — HEAT USE FAR FROM AI FORECAST" : "NORMAL";
+    var S = replay.sch[b.oslo];
+    document.getElementById("detailControlStrip").innerHTML = "";
+    var hintEl = document.getElementById("detailHint");
+    if (!hintEl.querySelector("#odPlay") || hintEl.getAttribute("data-oslo") !== b.id) {
+      hintEl.setAttribute("data-oslo", b.id);
+      hintEl.innerHTML =
+        '<div class="od-replay"><button type="button" class="od-btn primary" id="odPlay"></button>' +
+        '<button type="button" class="od-btn" id="odRestart">Restart</button>' +
+        '<select class="od-select" id="odSpeed" aria-label="Replay speed">' +
+          '<option value="1">1 hour / s</option><option value="6">6 hours / s</option><option value="24">1 day / s</option><option value="72">3 days / s</option><option value="168">1 week / s</option></select>' +
+        '<span class="od-clock" id="odClock"></span></div>';
+      hintEl.querySelector("#odSpeed").value = String(replay.speed);
+      hintEl.querySelector("#odPlay").addEventListener("click", function () {
+        var x = replay.sch[b.oslo];
+        if (x.playing) x.playing = false; else { if (x.ended) resetSchool(b.oslo); replay.sch[b.oslo].playing = true; }
+        syncTimer(); onReplayChange();
+      });
+      hintEl.querySelector("#odRestart").addEventListener("click", function () { resetSchool(b.oslo); syncTimer(); onReplayChange(); });
+      hintEl.querySelector("#odSpeed").addEventListener("change", function (e) { setReplaySpeed(e.target.value); });
+    }
+    document.getElementById("odPlay").textContent = S.playing ? "Pause" : (S.ended ? "Replay again" : "Play replay");
+    document.getElementById("odClock").textContent = clockText(S.i) + (S.ended ? " · end of window" : "");
+
+    var devTxt = L.dev === null ? "—" : (L.dev > 0 ? "+" : "") + Math.round(L.dev * 100) + " %";
+    var metrics = [
+      { label: "HEAT NOW", value: L.heat === null ? "—" : L.heat.toFixed(0) + " kW", warn: L.heating },
+      { label: "LAST 24 H", value: L.last24.toFixed(0) + " kWh" },
+      { label: "PER M², 24 H", value: (L.last24 / B.floor_area_m2).toFixed(3) + " kWh" },
+      { label: "OUTDOOR", value: L.tout === null ? "—" : fmtTemp(L.tout) },
+      { label: "AI FORECAST AS PREDICTED 24 H BEFORE", value: L.fc === null ? "—" : L.fc.toFixed(0) + " kW" },
+      { label: "VS FORECAST", value: devTxt, warn: L.attention }
+    ];
+    document.getElementById("detailMetrics").innerHTML = metrics.map(function (m) {
+      return '<div class="detail-metric' + (m.warn ? ' warn' : '') + '"><div class="dm-label">' + m.label +
+        '</div><div class="dm-value">' + escapeHtml(m.value) + '</div></div>';
     }).join("");
 
-    var featEl = document.getElementById("forecastFeatures");
-    if (featEl) {
-      featEl.textContent = "Features: " + f.features.join(", ") + ". History window: " + f.history_windows.join(" or ") + ".";
+    var el = document.getElementById("detailTabContent");
+    // rebuild the controls only when the drawer opens or a control changes, so a replay tick doesn't steal focus
+    if (!el.querySelector("#osloDrawerHeat") || el.getAttribute("data-oslo") !== b.id) {
+      el.setAttribute("data-oslo", b.id);
+      el.innerHTML =
+        '<div class="detail-section"><div class="detail-section-title">HEAT USE, ' + escapeHtml(b.name.toUpperCase()) + '</div>' +
+        '<div class="od-controls">' +
+          '<label class="od-check"><input type="checkbox" id="odFc"' + (d.fc ? " checked" : "") + '> AI forecast made</label>' +
+          '<select id="odH" class="od-select"><option value="1">1 h</option><option value="6">6 h</option><option value="24">24 h</option></select>' +
+          '<span class="od-mute">before</span>' +
+          '<select id="odRange" class="od-select"><option value="7">Last 7 days</option><option value="30">Last 30 days</option><option value="all">Whole window</option></select>' +
+        '</div>' +
+        '<div class="chart-wrap" id="osloDrawerHeat"></div>' +
+        '<p class="od-note" id="odNote"></p>' +
+        '<div class="detail-section-title" style="margin-top:14px;">OUTDOOR TEMPERATURE</div>' +
+        '<div class="chart-wrap" id="osloDrawerTout"></div>' +
+        '<details class="od-table"><summary>Show the last 24 hours as a table</summary><table class="data-table"><thead><tr><th>Time</th><th class="num">Heat (kW)</th><th class="num">AI forecast (kW)</th><th class="num">Outdoor</th></tr></thead><tbody id="odRows"></tbody></table></details></div>';
+      el.querySelector("#odH").value = d.h;
+      el.querySelector("#odRange").value = d.range;
+      el.querySelector("#odFc").addEventListener("change", function (e) { d.fc = e.target.checked; renderOsloDetail(b); });
+      el.querySelector("#odH").addEventListener("change", function (e) { d.h = e.target.value; renderOsloDetail(b); });
+      el.querySelector("#odRange").addEventListener("change", function (e) { d.range = e.target.value; renderOsloDetail(b); });
     }
+    var rows = osloDrawerRows(B, L);
+    var heatWrap = document.getElementById("osloDrawerHeat");
+    if (rows.length < 2) {
+      heatWrap.innerHTML = '<p class="od-note">Not enough replayed hours yet — press Play on the Control panel.</p>';
+      document.getElementById("osloDrawerTout").innerHTML = "";
+    } else {
+      buildLineChart({
+        wrapId: "osloDrawerHeat", gridColor: "rgba(255,255,255,0.07)", rows: rows, height: 220, unit: " kW", yMinFloor: 0,
+        series: d.fc
+          ? [{ key: "measured", color: "--series-measured-drawer", label: "Measured" }, { key: "forecast", color: "--series-forecast-drawer", label: "AI forecast " + d.h + " h before", dashed: true }]
+          : [{ key: "measured", color: "--series-measured-drawer", label: "Measured" }]
+      });
+      buildLineChart({
+        wrapId: "osloDrawerTout", gridColor: "rgba(255,255,255,0.07)", rows: rows, height: 130, unit: " °C",
+        series: [{ key: "tout", color: "--series-outdoor", label: "Outdoor" }]
+      });
+    }
+    document.getElementById("odNote").textContent = d.fc
+      ? "AI forecast of the whole building's heat use (model " + OSLO.meta.model.version + ", trained on data before " + OSLO.meta.model.train_end.slice(0, 10) +
+        "), made " + d.h + " h before each hour. The next hours' weather is replayed as a perfect forecast, so real errors would be larger. Only hours the replay has reached are drawn."
+      : "Measured district-heating use, replayed hour by hour. Times are UTC+1 all year.";
+    var tb = [];
+    for (var k = L.i; k > Math.max(L.i - 24, 0); k--) {
+      var f24 = B.forecast_kw["24"][k];
+      tb.push('<tr><td>' + osloStamp(t0 + k * OSLO_MS).replace("T", " ").slice(0, 16) + '</td><td class="num">' + (B.heat_kw[k] === null ? "—" : B.heat_kw[k].toFixed(1)) +
+        '</td><td class="num">' + (f24 === null ? "—" : f24.toFixed(1)) + '</td><td class="num">' + (B.tout_c[k] === null ? "—" : B.tout_c[k].toFixed(1)) + '</td></tr>');
+    }
+    document.getElementById("odRows").innerHTML = tb.join("");
+  }
+
+  // ---- Weekly page: forecast explorer + interactive twin ----
+  function initOsloControls() {
+    var mondays = OSLO.twin.mondays;
+    var schoolSeg = function (id, getB, setB) {
+      var seg = document.getElementById(id);
+      seg.innerHTML = OSLO.buildings.map(function (b, i) {
+        return '<button type="button" data-b="' + i + '" aria-pressed="' + (i === getB()) + '">School ' + b.id +
+          ' · ' + Math.round(b.floor_area_m2).toLocaleString("en-GB") + ' m²</button>';
+      }).join("");
+      seg.addEventListener("click", function (e) {
+        var btn = e.target.closest("button"); if (!btn) return;
+        setB(Number(btn.dataset.b));
+        Array.prototype.forEach.call(seg.querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", String(x === btn)); });
+      });
+    };
+    schoolSeg("aiBuildingSeg", function () { return oslo.b; }, function (v) { oslo.b = v; renderForecast(); });
+    schoolSeg("twinSchoolSeg", function () { return oslo.twinSel.b; }, function (v) { oslo.twinSel.b = v; fillTwinDays(); });
+
+    document.getElementById("aiHorizonSeg").addEventListener("click", function (e) {
+      var btn = e.target.closest("button"); if (!btn) return;
+      oslo.h = btn.dataset.h; renderForecast();
+    });
+    var sel = document.getElementById("aiRangeSelect");
+    sel.innerHTML = opt("all", "Whole replay (Oct – Mar)") + mondays.map(function (m) { return opt(m, "Week of " + weekLabel(m), m === oslo.range); }).join("");
+    sel.value = oslo.range;
+    sel.addEventListener("change", function () { oslo.range = sel.value; renderForecast(); });
+
+    var startSel = document.getElementById("twinStartSel");
+    startSel.innerHTML = mondays.map(function (m) { return opt(m, new Date(m + "T00:00:00Z").toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }), m === oslo.twinSel.week); }).join("");
+    startSel.addEventListener("change", function () { oslo.twinSel.week = startSel.value; fillTwinDays(); });
+    document.getElementById("twinDaysSel").addEventListener("change", function (e) { oslo.twinSel.days = e.target.value; });
+    fillTwinDays();
+    document.getElementById("twinRun").addEventListener("click", function () {
+      oslo.twin = { b: oslo.twinSel.b, week: oslo.twinSel.week, days: oslo.twinSel.days };
+      renderTwin();
+      document.getElementById("twinRunMsg").textContent = "Done — " + oslo.twin.days + " school day" + (oslo.twin.days === "1" ? "" : "s") + " simulated.";
+    });
+    document.getElementById("twinWeeks").addEventListener("click", function (e) {
+      var tr = e.target.closest("tr[data-week]"); if (!tr) return;
+      oslo.twinSel.week = oslo.twin.week = tr.dataset.week;
+      oslo.twinSel.b = oslo.twin.b;
+      document.getElementById("twinStartSel").value = tr.dataset.week;
+      fillTwinDays(); renderTwin();
+    });
+  }
+
+  function availableDays(b, week) {
+    var r = OSLO.twin.runs[String(OSLO.buildings[b].id)][week];
+    return Object.keys(r.days).map(Number).sort(function (x, y) { return x - y; });
+  }
+  function fillTwinDays() {
+    var days = availableDays(oslo.twinSel.b, oslo.twinSel.week);
+    var cur = Number(oslo.twinSel.days);
+    if (days.indexOf(cur) < 0) cur = days.filter(function (d) { return d <= cur; }).pop() || days[0];
+    oslo.twinSel.days = String(cur);
+    document.getElementById("twinDaysSel").innerHTML = days.map(function (d) { return opt(d, String(d), d === cur); }).join("");
+  }
+
+  function renderForecast() {
+    if (!OSLO) return;
+    var B = OSLO.buildings[oslo.b], h = oslo.h, M = OSLO.meta;
+    Array.prototype.forEach.call(document.querySelectorAll("#aiBuildingSeg button"), function (b) {
+      b.setAttribute("aria-pressed", String(Number(b.dataset.b) === oslo.b));
+    });
+    Array.prototype.forEach.call(document.querySelectorAll("#aiHorizonSeg button"), function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.h === h));
+    });
+    document.getElementById("aiRangeSelect").value = oslo.range;
+    document.getElementById("aiSub").textContent =
+      "Real output of the team's trained model (LightGBM, plus a neural network GRU at 6 and 24 h), replayed on three Oslo schools " +
+      "from the SINTEF COFACTOR-SBHUB dataset — not Trollhättan buildings. Forecasts cover the whole building, hot water included.";
+
+    var sc = B.scores_replay[h];
+    var tiles = [
+      { label: "Forecast error, this school", value: pct(sc.wape), sub: h + " h ahead · Oct – Mar replay · lower is better" },
+      { label: "Same hour yesterday (simple guess)", value: pct(sc.seasonal_naive_wape), sub: "error of the baseline to beat" },
+      { label: "Average miss", value: sc.mae_kw.toFixed(1) + " kW", sub: "per hour, on a school using about " + B.mean_kw.toFixed(0) + " kW on average" },
+      { label: "Model's final test error", value: pct(M.model.test_wape[h]), sub: "all 3 schools, Mar 2022 – Oct 2023, never seen in training" }
+    ];
+    document.getElementById("forecastRow").innerHTML = tiles.map(function (t) {
+      return '<div class="kpi"><div class="label">' + escapeHtml(t.label) + '</div>' +
+        '<div class="value" style="font-size:21px;">' + escapeHtml(t.value) + '</div>' +
+        '<div class="sub">' + escapeHtml(t.sub) + '</div></div>';
+    }).join("");
+    document.getElementById("aiLegendFc").textContent = "AI forecast made " + h + " h before";
+
+    var fc = B.forecast_kw[h], t0 = osloT0(), n = B.heat_kw.length, from = 0, to = n;
+    if (oslo.range !== "all") {
+      from = Math.round((Date.parse(oslo.range + "T00:00:00Z") - t0) / OSLO_MS);
+      to = Math.min(n, from + 7 * 24);
+    }
+    var rows = [];
+    for (var i = from; i < to; i++) {
+      if (fc[i] === null || B.heat_kw[i] === null) continue;
+      rows.push({ timestamp: osloStamp(t0 + i * OSLO_MS), measured: B.heat_kw[i], forecast: fc[i] });
+    }
+    buildLineChart({
+      wrapId: "aiChartWrap", rows: rows, height: 240, unit: " kW", yMinFloor: 0,
+      series: [
+        { key: "measured", color: "--series-measured", label: "Measured" },
+        { key: "forecast", color: "--series-forecast", label: "AI forecast", dashed: true }
+      ]
+    });
+    document.getElementById("forecastFeatures").textContent =
+      "Inputs: the last 168 h of heat use and weather, the next hours' weather, and the calendar (hour, weekday, holidays, school breaks). " +
+      "The weather is measured weather replayed as a perfect forecast, so a real forecast would score somewhat worse. " +
+      "Trained on data before " + M.model.train_end.slice(0, 10) + "; this replay period was never seen in training.";
+  }
+
+  function renderTwin() {
+    if (!OSLO) return;
+    var T = OSLO.twin, room = T.room, A = oslo.twin;
+    var B = OSLO.buildings[A.b], bid = String(B.id), days = Number(A.days);
+    var run = T.runs[bid][A.week], e = run.days[String(days)] || run.days[String(availableDays(A.b, A.week).pop())];
+    var L = e.legacy, C = e.combined;
+    Array.prototype.forEach.call(document.querySelectorAll("#twinSchoolSeg button"), function (b) {
+      b.setAttribute("aria-pressed", String(Number(b.dataset.b) === oslo.twinSel.b));
+    });
+    document.getElementById("twinSub").textContent =
+      "One simulated " + room.floor_area_m2 + " m² classroom, run twice on the real hourly weather of Oslo school " + bid +
+      ": today's fixed-schedule control against a smart controller. " + days + " school day" + (days === 1 ? "" : "s") + " from " +
+      weekLabel(A.week, days) + " (mean outdoor " + e.mean_outdoor_c.toFixed(1) + " °C). Simulated with assumed room parameters, not measured.";
+    var ch = C.heat_kWh / L.heat_kWh - 1;
+    var tiles = [
+      { label: "Heat, today's control", value: L.heat_kWh.toFixed(0) + " kWh", sub: "radiator " + L.radiator_kWh.toFixed(0) + " + ventilation coil " + L.coil_kWh.toFixed(0) },
+      { label: "Heat, smart control", value: C.heat_kWh.toFixed(0) + " kWh", sub: "radiator " + C.radiator_kWh.toFixed(0) + " + ventilation coil " + C.coil_kWh.toFixed(0) },
+      { label: "Change in heat", value: (ch > 0 ? "+" : "") + (ch * 100).toFixed(1) + " %", cls: ch < -0.005 ? "good" : (ch > 0.005 ? "warn" : ""), sub: ch < -0.005 ? "overshoot removed" : "pre-heats earlier to keep lessons warm" },
+      { label: "Lesson minutes below 20 °C", value: L.occupied_minutes_below_lower_limit + " → " + C.occupied_minutes_below_lower_limit, cls: "good", sub: "today → smart control" },
+      { label: "Peak room temperature", value: L.peak_t_air_C.toFixed(1) + " → " + C.peak_t_air_C.toFixed(1) + " °C", sub: "minutes at purge limit (" + room.purge_trigger_c + " °C): " + L.minutes_above_purge + " → " + C.minutes_above_purge },
+      { label: "AI forecast, scaled to the room", value: aiBenchmarkKwh(B, A.week, days).toFixed(0) + " kWh", sub: "24 h forecast for the whole building × 60 m² / building area; rough reference, no controller uses it" }
+    ];
+    document.getElementById("twinKpis").innerHTML = tiles.map(function (t) {
+      return '<div class="kpi"><div class="label">' + escapeHtml(t.label) + '</div>' +
+        '<div class="value ' + (t.cls || "") + '" style="font-size:21px;">' + escapeHtml(t.value) + '</div>' +
+        '<div class="sub">' + escapeHtml(t.sub) + '</div></div>';
+    }).join("");
+
+    var s = run.series, npts = days * 48, rows = [], t0 = Date.parse(A.week + "T00:00:00Z"), step = T.series_step_min * 60000;
+    var bench = aiBenchmarkSeries(B, A.week, npts);
+    for (var i = 0; i < npts && i < s.legacy_kw.length; i++) {
+      rows.push({ timestamp: osloStamp(t0 + (i + 1) * step), legacy: s.legacy_t_air[i], smart: s.combined_t_air[i], legacy_kw: s.legacy_kw[i], smart_kw: s.combined_kw[i], ai_kw: bench[i] });
+    }
+    buildLineChart({
+      wrapId: "twinTempWrap", rows: rows, height: 200, unit: " °C", yMinFloor: 16, yMaxCeil: room.purge_trigger_c, comfortBand: [20, 22],
+      series: [
+        { key: "legacy", color: "--series-baseline", label: "Today" },
+        { key: "smart", color: "--series-optimized", label: "Smart" }
+      ]
+    });
+    buildLineChart({
+      wrapId: "twinPowerWrap", rows: rows, height: 180, unit: " kW", yMinFloor: 0,
+      series: [
+        { key: "legacy_kw", color: "--series-baseline", label: "Today" },
+        { key: "smart_kw", color: "--series-optimized", label: "Smart" },
+        { key: "ai_kw", color: "--series-forecast", label: "AI benchmark (60 m² share)", dashed: true }
+      ]
+    });
+
+    var totL = 0, totC = 0, cnt = 0;
+    var body = T.mondays.filter(function (m) { return T.runs[bid][m].days[String(days)]; }).map(function (m) {
+      var x = T.runs[bid][m].days[String(days)], d = x.combined.heat_kWh / x.legacy.heat_kWh - 1;
+      totL += x.legacy.heat_kWh; totC += x.combined.heat_kWh; cnt++;
+      var width = Math.min(50, Math.abs(d) * 100 * 2.2);
+      return '<tr data-week="' + m + '"' + (m === A.week ? ' class="sel"' : '') + '>' +
+        '<td>' + escapeHtml(weekLabel(m, days)) + '</td>' +
+        '<td class="num">' + x.mean_outdoor_c.toFixed(1) + ' °C</td>' +
+        '<td class="num">' + x.legacy.heat_kWh.toFixed(0) + '</td>' +
+        '<td class="num">' + x.combined.heat_kWh.toFixed(0) + '</td>' +
+        '<td><span class="dbar"><i class="' + (d < 0 ? "save" : "more") + '" style="width:' + width.toFixed(1) + '%"></i></span>' +
+        (d > 0 ? "+" : "") + (d * 100).toFixed(1) + ' %</td>' +
+        '<td class="num">' + x.legacy.occupied_minutes_below_lower_limit + ' → ' + x.combined.occupied_minutes_below_lower_limit + '</td></tr>';
+    }).join("");
+    var tot = totC / totL - 1;
+    document.getElementById("twinWeeksTitle").textContent = "Every " + days + "-day run from a Monday, school " + bid + " weather";
+    document.getElementById("twinWeeks").innerHTML =
+      '<thead><tr><th>Start</th><th class="num">Outdoor</th><th class="num">Today kWh</th><th class="num">Smart kWh</th><th>Heat change</th><th class="num">Cold lesson min</th></tr></thead>' +
+      '<tbody>' + body + '</tbody>' +
+      '<tfoot><tr><td><strong>All ' + cnt + ' runs</strong></td><td></td><td class="num"><strong>' + totL.toFixed(0) + '</strong></td><td class="num"><strong>' + totC.toFixed(0) +
+      '</strong></td><td><strong>' + (tot > 0 ? "+" : "") + (tot * 100).toFixed(1) + ' %</strong></td><td></td></tr></tfoot>';
+    document.getElementById("twinNote").textContent =
+      "Reading it: in cold, dark weeks (Nov – mid Feb) the room never overshoots, so smart control saves no heat and even uses a few % more, because it pre-heats earlier; what it buys is far fewer cold lesson minutes. " +
+      "The saving appears in mild or sunny weeks (early October, late Feb – March), when the legacy room overshoots towards 25 °C. " + T.note;
+  }
+
+  // AI benchmark for the twin card: the 24 h forecast for the whole building, scaled by room m2 / building m2
+  function aiBenchmarkSeries(B, week, npts) {
+    var fc = B.forecast_kw["24"], t0 = osloT0(), i0 = Math.round((Date.parse(week + "T00:00:00Z") - t0) / OSLO_MS);
+    var scale = OSLO.twin.room.floor_area_m2 / B.floor_area_m2, out = [];
+    for (var k = 0; k < npts; k++) {
+      var hr = i0 + Math.floor((k + 1) / 2), v = fc[Math.min(hr, fc.length - 1)];
+      out.push(v === null ? 0 : Math.round(v * scale * 100) / 100);
+    }
+    return out;
+  }
+  function aiBenchmarkKwh(B, week, days) {
+    var fc = B.forecast_kw["24"], i0 = Math.round((Date.parse(week + "T00:00:00Z") - osloT0()) / OSLO_MS), sum = 0;
+    for (var k = 0; k < days * 24; k++) sum += fc[i0 + k] || 0;
+    return sum * OSLO.twin.room.floor_area_m2 / B.floor_area_m2;
   }
 
   // ---------------------------------------------------------------------
   // Settings — validation benchmarks + model parameters (from the
-  // classroom-twin parameter research, data/params_research.md).
+  // teammate's classroom-twin parameter research, data/params_research.md).
   // Static per load: reuses the .kpi tile and .data-table markup already
   // styled for the Weekly temperature page, so nothing new to theme.
   // ---------------------------------------------------------------------
@@ -537,7 +973,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
       var vline = document.createElementNS(svgNS, "line");
       vline.setAttribute("x1", lx); vline.setAttribute("x2", lx);
       vline.setAttribute("y1", MARGIN.top); vline.setAttribute("y2", MARGIN.top + innerH);
-      vline.setAttribute("stroke", cssVar("--grid"));
+      vline.setAttribute("stroke", opts.gridColor || cssVar("--grid"));
       vline.setAttribute("stroke-width", "1");
       svg.appendChild(vline);
       if (bi % labelStride === 0) {
@@ -771,6 +1207,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   }
 
   function buildingState(b) {
+    if (b.oslo !== undefined) return osloState(b);
     var o = overrides[b.id];
     var mode = o && o.mode ? o.mode : b.mode;
     var heaterOn = o && typeof o.heater_on === "boolean" ? o.heater_on : b.heater_on;
@@ -781,6 +1218,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   var WARN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 16.5h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>';
 
   function flaggedRooms(b) {
+    if (b.oslo !== undefined) return [];
     return (effective(b).rooms || []).filter(function (r) { return r.status !== "normal"; });
   }
 
@@ -839,6 +1277,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
     if (!DATA || !DATA.buildings) return;
     var anyChange = false;
     DATA.buildings.forEach(function (b) {
+      if (b.oslo !== undefined) return;
       var st = buildingState(b);
       if (!st.heaterOn) return; // frozen until the heater is actually running
       var sim = getSim(b);
@@ -1010,8 +1449,12 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
       : DATA.buildings.filter(function (b) { return b.type === typeFilter; });
 
     var container = document.getElementById("buildingList");
-    // remove previously rendered rows (keep the header row)
-    Array.prototype.slice.call(container.querySelectorAll(".b-row:not(.b-head)")).forEach(function (el) { el.remove(); });
+    var osloContainer = document.getElementById("osloList");
+    // remove previously rendered rows (keep the header rows)
+    osloContainer.hidden = !list.some(function (b) { return b.oslo !== undefined; });
+    [container, osloContainer].forEach(function (c) {
+      Array.prototype.slice.call(c.querySelectorAll(".b-row:not(.b-head)")).forEach(function (el) { el.remove(); });
+    });
 
     list.forEach(function (b) {
       var st = buildingState(b);
@@ -1023,6 +1466,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
       row.setAttribute("role", "button");
       row.setAttribute("aria-label", "Open details for " + b.name);
 
+      var isOslo = b.oslo !== undefined;
       var pillClass = st.attention ? "attention" : st.status;
       var pillLabel = st.attention ? "Needs attention" : (st.status === "heating" ? "Heating" : "Idle");
 
@@ -1041,9 +1485,21 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
 
       row.querySelector(".b-name").textContent = b.name;
       row.querySelector(".b-code").textContent = b.code;
-      row.querySelector(".b-type-tag").textContent = b.type;
+      row.querySelector(".b-type-tag").textContent = b.type_label || b.type;
+      if (isOslo) {
+        row.classList.add("oslo");
+        row.querySelector(".b-mode").innerHTML = '<span class="replay-badge" title="Measured data replayed from the Oslo dataset — read-only">Replay · read-only</span>';
+        row.querySelector(".b-power").innerHTML = '';
+      }
       row.querySelector(".status-pill").textContent = pillLabel;
 
+      if (isOslo && st.attention) {
+        var OL = osloLive(b), dl = document.createElement("div");
+        dl.className = "b-alert-line";
+        dl.innerHTML = WARN_ICON + "<span></span>";
+        dl.querySelector("span").textContent = "Heat use " + Math.abs(Math.round(OL.dev * 100)) + " % " + (OL.dev > 0 ? "above" : "below") + " the AI forecast";
+        row.querySelector(".b-id").appendChild(dl);
+      }
       if (flagged.length) {
         var alertLine = document.createElement("div");
         alertLine.className = "b-alert-line";
@@ -1056,12 +1512,19 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
       }
 
       var tempEl = row.querySelector(".b-temp");
-      tempEl.textContent = fmtTemp(effective(b).indoor_c);
       var targetSpan = document.createElement("span");
       targetSpan.className = "b-target";
-      targetSpan.textContent = "target " + fmtTemp(b.target_c);
+      if (isOslo) {
+        var LV = osloLive(b);
+        tempEl.textContent = LV.heat === null ? "—" : LV.heat.toFixed(0) + " kW";
+        targetSpan.textContent = "outdoor " + (LV.tout === null ? "—" : fmtTemp(LV.tout)) + " · 24 h " + LV.last24.toFixed(0) + " kWh";
+      } else {
+        tempEl.textContent = fmtTemp(effective(b).indoor_c);
+        targetSpan.textContent = "target " + fmtTemp(b.target_c);
+      }
       tempEl.appendChild(targetSpan);
 
+      if (!isOslo) {
       var modeSeg = row.querySelector(".mode-seg");
       modeSeg.querySelectorAll("button").forEach(function (btn) {
         btn.setAttribute("aria-pressed", btn.getAttribute("data-mode") === st.mode ? "true" : "false");
@@ -1093,12 +1556,13 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
         renderBuildings();
       });
 
+      }
       row.addEventListener("click", function () { openDetail(b.id); });
       row.addEventListener("keydown", function (e) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(b.id); }
       });
 
-      container.appendChild(row);
+      (b.oslo !== undefined ? osloContainer : container).appendChild(row);
     });
   }
 
@@ -1115,6 +1579,8 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
 
   function openDetail(id) {
     activeBuildingId = id;
+    document.getElementById("detailTabContent").removeAttribute("data-oslo");
+    document.getElementById("detailHint").removeAttribute("data-oslo");
     activeTab = "hvac";
     document.querySelectorAll("#detailTabs button").forEach(function (b) {
       b.setAttribute("aria-selected", b.getAttribute("data-tab") === "hvac" ? "true" : "false");
@@ -1175,6 +1641,10 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
   function renderDetail() {
     var b = findBuilding(activeBuildingId);
     if (!b) return;
+    detailDrawer.classList.toggle("oslo-mode", b.oslo !== undefined);
+    if (b.oslo !== undefined) { renderOsloDetail(b); return; }
+    document.getElementById("detailTabContent").removeAttribute("data-oslo");
+    document.getElementById("detailHint").removeAttribute("data-oslo");
     var st = buildingState(b);
     var attention = st.attention;
 
@@ -1285,7 +1755,7 @@ setLiveWeather(DATA.timeseries[DATA.timeseries.length - 1].outdoor_temp_c); // s
 
   function renderDetailTab() {
     var b = findBuilding(activeBuildingId);
-    if (!b) return;
+    if (!b || b.oslo !== undefined) return;
     var st = buildingState(b);
     var el = document.getElementById("detailTabContent");
 

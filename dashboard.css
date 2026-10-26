@@ -25,6 +25,10 @@
   --series-optimized: #2a78d6;
   --series-baseline:  #eb6834;
   --series-outdoor:   #898781;
+  --series-measured: #3b4a50;
+  --series-forecast: #7a4fd0;
+  --series-measured-drawer: #d7e2e2;
+  --series-forecast-drawer: #b08cf0;
 
   --good:      #227a4e;
   --good-wash: rgba(34,122,78,0.10);
@@ -61,6 +65,8 @@
     --series-optimized: #3987e5;
     --series-baseline:  #d95926;
     --series-outdoor:   #8d9a9d;
+    --series-measured: #9fb4bb;
+    --series-forecast: #b08cf0;
 
     --good:      #35b17d;
     --good-wash: rgba(53,177,125,0.14);
@@ -92,6 +98,8 @@
   --series-optimized: #3987e5;
   --series-baseline:  #d95926;
   --series-outdoor:   #8d9a9d;
+  --series-measured: #9fb4bb;
+  --series-forecast: #b08cf0;
 
   --good:      #35b17d;
   --good-wash: rgba(53,177,125,0.14);
@@ -706,3 +714,78 @@ table.param-table th, table.param-table td { text-align: left; }
   .b-row .b-mode, .b-row .b-type { display: none; }
   .weather-fx { left: 0; }
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Oslo AI forecast + twin weeks (data/oslo_ai.json)                    */
+/* ------------------------------------------------------------------ */
+.oslo-controls { margin: 4px 0 14px; }
+.oslo-h3 { font-size: 13px; font-weight: 650; margin: 16px 0 4px; color: var(--ink); }
+.oslo-h3-sub { font-weight: 400; color: var(--ink-muted); font-size: 12px; }
+.table-scroll { overflow-x: auto; }
+table.twin-weeks { min-width: 560px; }
+table.twin-weeks tbody tr { cursor: pointer; }
+table.twin-weeks tbody tr:hover td { background: var(--brand-wash); }
+table.twin-weeks tbody tr.sel td { background: var(--brand-wash); font-weight: 600; }
+table.twin-weeks td.num, table.twin-weeks th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.dbar { position: relative; height: 10px; width: 150px; background: var(--surface-2); border-radius: 3px; display: inline-block; vertical-align: middle; margin-right: 8px; }
+.dbar::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--axis); }
+.dbar i { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.dbar i.save { right: 50%; background: var(--good); }
+.dbar i.more { left: 50%; background: var(--series-baseline); }
+.kpi .value.good { color: var(--good); }
+.kpi .value.warn { color: var(--series-baseline); }
+
+/* Replay bar (Control panel) */
+.replay-bar {
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin: 0 0 14px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 16px; box-shadow: var(--shadow-1);
+}
+.rb-title { font-weight: 650; font-size: 13px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rb-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--series-forecast); }
+.rb-sub { font-weight: 400; color: var(--ink-muted); font-size: 11.5px; }
+.rb-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rb-speed { font-size: 12px; color: var(--ink-muted); display: inline-flex; align-items: center; gap: 6px; }
+.rb-btn {
+  appearance: none; border: 1px solid var(--border); background: var(--surface); color: var(--ink-secondary);
+  font-family: inherit; font-size: 12.5px; font-weight: 500; padding: 7px 14px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.rb-btn:hover { background: var(--surface-2); }
+.rb-btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 600; }
+.rb-btn.primary:hover { filter: brightness(1.08); }
+.rb-clock { margin-left: auto; text-align: right; min-width: 190px; }
+.rb-clock strong { font-family: "IBM Plex Mono"; font-size: 16px; }
+.rb-phase { display: block; font-size: 11px; color: var(--ink-muted); margin-top: 1px; }
+.rb-progress { height: 4px; background: var(--surface-2); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+.rb-progress i { display: block; height: 100%; width: 0; background: var(--series-forecast); transition: width 0.3s; }
+.replay-badge { font-size: 11px; color: var(--ink-muted); border: 1px dashed var(--axis); border-radius: 100px; padding: 3px 9px; white-space: nowrap; }
+
+/* Oslo school detail drawer */
+.detail-drawer.oslo-mode .detail-control-strip, .detail-drawer.oslo-mode .detail-tabs { display: none; }
+.detail-drawer .grid-line { stroke: rgba(255,255,255,0.09); }
+.detail-drawer .axis-text { fill: #6f8488; }
+.detail-drawer .comfort-band { fill: #3fd17a; }
+.od-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 8px 0 6px; font-size: 12px; color: #9fb4bb; }
+.od-check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.od-mute { color: #6f8488; }
+.od-select { background: transparent; color: #d7e2e2; border: 1px solid rgba(255,255,255,0.18); border-radius: 6px; padding: 4px 6px; font-family: inherit; font-size: 12px; }
+.od-select option { color: #14181c; }
+.od-note { font-size: 11px; color: #6f8488; margin: 6px 0 0; }
+.od-table { margin: 14px 0 20px; font-size: 12px; color: #9fb4bb; }
+.od-table summary { cursor: pointer; }
+.od-table table { width: 100%; margin-top: 8px; border-collapse: collapse; }
+.od-table th, .od-table td { padding: 5px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.07); background: transparent; position: static; color: #d7e2e2; font-size: 11.5px; }
+.od-table th { color: #6f8488; }
+.od-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.detail-drawer .tooltip { background: #1a2326; border-color: rgba(255,255,255,0.14); color: #d7e2e2; }
+.detail-drawer .tooltip .t-val { color: #eef6f6; }
+.b-row.oslo .b-name::after { content: ""; }
+
+.replay-bar { margin: 14px 0; }
+#osloList { margin-bottom: 16px; }
+.od-replay { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.od-btn { appearance: none; border: 1px solid rgba(255,255,255,0.18); background: transparent; color: #d7e2e2; font-family: inherit; font-size: 12px; padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+.od-btn:hover { background: rgba(255,255,255,0.07); }
+.od-btn.primary { background: #2ea8e0; border-color: #2ea8e0; color: #06232c; font-weight: 600; }
+.od-clock { margin-left: auto; font-family: "IBM Plex Mono"; font-size: 12px; color: #eef6f6; }

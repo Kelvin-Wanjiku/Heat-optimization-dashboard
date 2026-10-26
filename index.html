@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Kraftstaden AB — Heat Control</title>
-<link rel="stylesheet" href="dashboard.css?v=16" />
+<link rel="stylesheet" href="dashboard.css?v=19" />
 </head>
 <body>
 
@@ -94,10 +94,52 @@
 
       <div class="kpi-row" id="kpiRow"></div>
 
-      <div class="card">
-        <h2>Heat-usage forecast <span class="confidence-pill assumed" style="vertical-align:middle;">illustrative</span></h2>
+      <div class="card" id="aiCard">
+        <h2>Heat-usage forecast <span class="confidence-pill sourced" style="vertical-align:middle;">model output · Oslo schools</span></h2>
+        <p class="card-sub" id="aiSub">Loading…</p>
+        <div class="filters oslo-controls">
+          <div class="seg" id="aiBuildingSeg" role="group" aria-label="School"></div>
+          <div class="seg" id="aiHorizonSeg" role="group" aria-label="Forecast horizon">
+            <button type="button" data-h="1" aria-pressed="false">1 h ahead</button>
+            <button type="button" data-h="6" aria-pressed="false">6 h ahead</button>
+            <button type="button" data-h="24" aria-pressed="true">24 h ahead</button>
+          </div>
+          <select class="type-select" id="aiRangeSelect" aria-label="Period shown"></select>
+        </div>
         <div class="kpi-row" id="forecastRow"></div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-measured)"></span>Measured heat use (kW)</span>
+          <span class="legend-item"><span class="legend-swatch-dash" style="border-top-color:var(--series-forecast)"></span><span id="aiLegendFc">AI forecast</span></span>
+        </div>
+        <div class="chart-wrap" id="aiChartWrap"></div>
         <p class="hint" id="forecastFeatures"></p>
+      </div>
+
+      <div class="card" id="twinCard">
+        <h2>Smart control on real Oslo winter weather <span class="confidence-pill assumed" style="vertical-align:middle;">simulated classroom</span></h2>
+        <p class="card-sub" id="twinSub">Loading…</p>
+        <div class="filters oslo-controls">
+          <div class="seg" id="twinSchoolSeg" role="group" aria-label="Weather of school"></div>
+          <label for="twinStartSel">Start (Monday)</label>
+          <select class="type-select" id="twinStartSel" aria-label="Start Monday"></select>
+          <label for="twinDaysSel">Days</label>
+          <select class="type-select" id="twinDaysSel" style="min-width:64px;" aria-label="Number of days"></select>
+          <button type="button" class="rb-btn primary" id="twinRun">Run simulation</button>
+          <span class="hint" id="twinRunMsg"></span>
+        </div>
+        <div class="kpi-row" id="twinKpis"></div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-baseline)"></span>Today's control (legacy)</span>
+          <span class="legend-item"><span class="legend-swatch-line" style="background:var(--series-optimized)"></span>Smart control (forecast pre-heat + supply-air control)</span>
+          <span class="legend-item"><span class="legend-swatch-dash" style="border-top-color:var(--series-forecast)"></span>AI benchmark (power chart)</span>
+        </div>
+        <h3 class="oslo-h3">Room temperature (°C)</h3>
+        <div class="chart-wrap" id="twinTempWrap"></div>
+        <h3 class="oslo-h3">Heat power, radiator + ventilation coil (kW)</h3>
+        <div class="chart-wrap" id="twinPowerWrap"></div>
+        <h3 class="oslo-h3"><span id="twinWeeksTitle">Every run from a Monday</span> <span class="oslo-h3-sub">· click a row to open it</span></h3>
+        <div class="table-scroll"><table class="data-table twin-weeks" id="twinWeeks"></table></div>
+        <p class="hint" id="twinNote"></p>
       </div>
 
       <div id="chartsView">
@@ -151,6 +193,7 @@
     <section class="view" id="view-control">
       <div class="summary-grid" id="summaryGrid"></div>
 
+
       <div class="control-toolbar">
         <p class="control-sub">Outdoor temperature today: <strong id="controlOutdoor">—</strong> · heaters shown in <strong>Auto</strong> follow this reading</p>
         <div class="control-legend">
@@ -169,12 +212,45 @@
         <div class="b-row b-head">
           <div class="b-id">Building</div>
           <div class="b-type">Type</div>
-          <div class="b-temp">Indoor / target</div>
+          <div class="b-temp">Indoor · target / heat now</div>
           <div class="b-status">Status</div>
           <div class="b-mode">Mode</div>
           <div class="b-power">Heater</div>
         </div>
         <!-- rows injected by dashboard.js -->
+      </div>
+
+      <div class="replay-bar" id="replayBar" hidden>
+        <div class="rb-title"><span class="rb-dot"></span>Oslo school replay<span class="rb-sub">3 schools · measured data + AI forecast</span></div>
+        <div class="rb-controls">
+          <button type="button" class="rb-btn primary" id="replayPlay">Play</button>
+          <button type="button" class="rb-btn" id="replayRestart">Restart</button>
+          <label class="rb-speed">Speed
+            <select class="type-select" id="replaySpeed" aria-label="Replay speed">
+              <option value="1">1 hour / s</option>
+              <option value="6">6 hours / s</option>
+              <option value="24" selected>1 day / s</option>
+              <option value="72">3 days / s</option>
+              <option value="168">1 week / s</option>
+            </select>
+          </label>
+        </div>
+        <div class="rb-clock">
+          <strong id="replayClock">—</strong>
+          <span id="replayPhase" class="rb-phase"></span>
+          <div class="rb-progress"><i id="replayFill"></i></div>
+        </div>
+      </div>
+
+      <div class="building-list" id="osloList" hidden>
+        <div class="b-row b-head">
+          <div class="b-id">Oslo schools (replay)</div>
+          <div class="b-type">Type</div>
+          <div class="b-temp">Heat now</div>
+          <div class="b-status">Status</div>
+          <div class="b-mode">Mode</div>
+          <div class="b-power"></div>
+        </div>
       </div>
     </section>
 
@@ -241,7 +317,11 @@
         <p class="hint">Q<sub>radiator</sub>: twin, from valve position &amp; supply temperature, capped at the 3 kW rated output. Q<sub>internal</sub>: pupils + teacher + lighting + equipment while occupied. Q<sub>solar</sub>: irradiance &times; window area &times; glazing g-value. Q<sub>vent</sub>: ventilation loss, net of heat-recovery efficiency — the lever the "optimized" scenario uses. Full term-by-term definitions: <code>data/room_energy_balance.md</code>.</p>
       </div>
 
-     
+     <!--  <div class="card">
+        <h2>Heat-usage forecast model <span class="confidence-pill assumed">preview</span></h2>
+        <p class="card-sub">A teammate is separately training a short-horizon forecasting model, trained on a public dataset rather than this twin. It isn't connected to this dashboard yet — the forecast card on the Weekly temperature page is illustrative, not live output.</p>
+        <p class="hint">Predicts heat usage 1 h / 6 h / 24 h ahead, conditioned on the past 24 h or 168 h (1 week) of heat usage. Features: time, past heat input, outdoor temperature, wind speed, wind direction, solar energy — chosen partly because they're simple enough for real IoT sensors to supply. Training data: ~200,000 cleaned hourly readings (from 2.2 million raw) across 48 Oslo school buildings — the SINTEF COFACTOR-SBHUB Oslo dataset (S.K. Lien et al., <em>Data in Brief</em> 63, 2025, doi:10.1016/j.dib.2025.112288).</p>
+      </div> -->
 
       <div class="card">
         <h2>Validation benchmarks</h2>
@@ -298,6 +378,6 @@
   </div>
 </aside>
 
-<script src="dashboard.js?v=17"></script>
+<script src="dashboard.js?v=20"></script>
 </body>
 </html>
